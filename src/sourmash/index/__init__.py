@@ -37,19 +37,50 @@ LazyLoadedIndex - selection on manifests with loading of index on demand.
 CounterGather - an ancillary class returned by the 'counter_gather()' method.
 """
 
+from __future__ import annotations
+
 import os
 import sourmash
 from abc import abstractmethod, ABC
-from collections import namedtuple, Counter
+from collections import Counter
 from collections import defaultdict
+from typing import NamedTuple, Optional, TypedDict, TYPE_CHECKING
 
 from ..search import make_jaccard_search_query, make_gather_query
 from ..manifest import CollectionManifest
 from ..logging import debug_literal
 from ..signature import load_signatures, save_signatures
+from .._lowlevel import ffi, lib
+from ..utils import RustObject, rustcall, decode_str, encode_str
+from .. import SourmashSignature
+from ..picklist import SignaturePicklist
 
-# generic return tuple for Index.search and Index.gather
-IndexSearchResult = namedtuple('Result', 'score, signature, location')
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+
+class IndexSearchResult(NamedTuple):
+    """generic return tuple for Index.search and Index.gather"""
+    score: float
+    signature: SourmashSignature
+    location: str
+
+
+class Selection(TypedDict):
+    ksize: Optional[int]
+    moltype: Optional[str]
+    num: Optional[int]
+    scaled: Optional[int]
+    containment: Optional[bool]
+    abund: Optional[bool]
+    picklist: Optional[SignaturePicklist]
+
+
+# TypedDict can't have methods (it is a dict in runtime)
+def _selection_as_rust(selection: Selection):
+    ...
+
+
 
 class Index(ABC):
     # this will be removed soon; see sourmash#1894.
@@ -282,7 +313,6 @@ class Index(ABC):
 
     def peek(self, query_mh, threshold_bp=0):
         "Mimic CounterGather.peek() on top of Index. Yes, this is backwards."
-        from sourmash import SourmashSignature
 
         # build a signature to use with self.gather...
         query_ss = SourmashSignature(query_mh)
@@ -332,8 +362,7 @@ class Index(ABC):
         return counter
 
     @abstractmethod
-    def select(self, ksize=None, moltype=None, scaled=None, num=None,
-               abund=None, containment=None):
+    def select(self, **kwargs: Unpack[Selection]):
         """Return Index containing only signatures that match requirements.
 
         Current arguments can be any or all of:
@@ -433,7 +462,7 @@ class LinearIndex(Index):
         lidx = LinearIndex(si, filename=filename)
         return lidx
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         """Return new LinearIndex containing only signatures that match req's.
 
         Does not raise ValueError, but may return an empty Index.
@@ -504,7 +533,7 @@ class LazyLinearIndex(Index):
     def load(cls, path):
         raise NotImplementedError
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         """Return new object yielding only signatures that match req's.
 
         Does not raise ValueError, but may return an empty Index.
@@ -519,7 +548,7 @@ class LazyLinearIndex(Index):
         return LazyLinearIndex(self.db, selection_dict)
 
 
-class ZipFileLinearIndex(Index):
+class ZipFileLinearIndex(Index, RustObject):
     """\
     A read-only collection of signatures in a zip file.
 
@@ -528,6 +557,8 @@ class ZipFileLinearIndex(Index):
     Concrete class; signatures dynamically loaded from disk; uses manifests.
     """
     is_database = True
+
+    #__dealloc_func__ = lib.zflinearindex_free
 
     def __init__(self, storage, *, selection_dict=None,
                  traverse_yield_all=False, manifest=None, use_manifest=True):
@@ -667,7 +698,7 @@ class ZipFileLinearIndex(Index):
                         if select(ss):
                             yield ss
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         "Select signatures in zip file based on ksize/moltype/etc."
 
         # if we have a manifest, run 'select' on the manifest.
@@ -1051,7 +1082,7 @@ class MultiIndex(Index):
     def save(self, *args):
         raise NotImplementedError
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         "Run 'select' on the manifest."
         new_manifest = self.manifest.select_to_manifest(**kwargs)
         return MultiIndex(new_manifest, self.parent,
@@ -1163,7 +1194,7 @@ class LazyLoadedIndex(Index):
     def save(self, *args):
         raise NotImplementedError
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         "Run 'select' on manifest, return new object with new manifest."
         manifest = self.manifest
         new_manifest = manifest.select_to_manifest(**kwargs)
@@ -1278,7 +1309,7 @@ class StandaloneManifestIndex(Index):
     def insert(self, *args):
         raise NotImplementedError
 
-    def select(self, **kwargs):
+    def select(self, **kwargs: Unpack[Selection]):
         "Run 'select' on the manifest."
         new_manifest = self.manifest.select_to_manifest(**kwargs)
         return StandaloneManifestIndex(new_manifest, self._location,

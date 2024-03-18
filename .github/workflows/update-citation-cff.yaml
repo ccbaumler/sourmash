@@ -32,7 +32,7 @@ jobs:
           # Update CITATION.cff file
           cffr::cff_write(keys = list())
         shell: Rscript {0}
-        
+
       - name: Commit results
         run: |
           git config --local user.name "$GITHUB_ACTOR"

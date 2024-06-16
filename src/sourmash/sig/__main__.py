@@ -384,10 +384,10 @@ def overlap(args):
 
     moltype = sourmash_args.calculate_moltype(args)
 
-    sig1 = sourmash.load_one_signature(
+    sig1 = sourmash_args.load_one_signature(
         args.signature1, ksize=args.ksize, select_moltype=moltype
     )
-    sig2 = sourmash.load_one_signature(
+    sig2 = sourmash_args.load_one_signature(
         args.signature2, ksize=args.ksize, select_moltype=moltype
     )
 
@@ -512,7 +512,7 @@ def merge(args):
         error("no signatures to merge!?")
         sys.exit(-1)
 
-    merged_sigobj = sourmash.SourmashSignature(mh, name=args.name)
+    merged_sigobj = sourmash.SourmashSignature(mh, name=args.set_name)
 
     with sourmash_args.SaveSignaturesToLocation(args.output) as save_sigs:
         save_sigs.add(merged_sigobj)
@@ -573,7 +573,7 @@ def intersect(args):
     # borrow abundances from a signature?
     if args.abundances_from:
         notify(f"loading signature from {args.abundances_from}, keeping abundances")
-        abund_sig = sourmash.load_one_signature(
+        abund_sig = sourmash_args.load_one_signature(
             args.abundances_from, ksize=args.ksize, select_moltype=moltype
         )
         if not abund_sig.minhash.track_abundance:
@@ -582,7 +582,8 @@ def intersect(args):
 
         intersect_mh = intersect_mh.inflate(abund_sig.minhash)
 
-    intersect_sigobj = sourmash.SourmashSignature(intersect_mh)
+    intersect_sigobj = sourmash.SourmashSignature(intersect_mh, name=args.set_name)
+
     with sourmash_args.SaveSignaturesToLocation(args.output) as save_sigs:
         save_sigs.add(intersect_sigobj)
 
@@ -646,9 +647,8 @@ def subtract(args):
     set_quiet(args.quiet)
     moltype = sourmash_args.calculate_moltype(args)
 
-    from_sigfile = args.signature_from
-    from_sigobj = sourmash.load_one_signature(
-        from_sigfile, ksize=args.ksize, select_moltype=moltype
+    from_sigobj = sourmash_args.load_one_signature(
+        args.signature_from, ksize=args.ksize, select_moltype=moltype
     )
 
     if args.abundances_from:  # it's ok to work with abund signatures if -A.
@@ -661,7 +661,7 @@ def subtract(args):
 
     subtract_mins = set(from_mh.hashes)
 
-    notify(f"loaded signature from {from_sigfile}...", end="\r")
+    notify(f"loaded signature from {args.signature_from}...", end="\r")
 
     progress = sourmash_args.SignatureLoadingProgress()
 
@@ -694,16 +694,17 @@ def subtract(args):
     # borrow abundances from somewhere?
     if args.abundances_from:
         notify(f"loading signature from {args.abundances_from}, keeping abundances")
-        abund_sig = sourmash.load_one_signature(
+        abund_sig = sourmash_args.load_one_signature(
             args.abundances_from, ksize=args.ksize, select_moltype=moltype
         )
+
         if not abund_sig.minhash.track_abundance:
             error("--track-abundance not set on loaded signature?! exiting.")
             sys.exit(-1)
 
         subtract_mh = subtract_mh.inflate(abund_sig.minhash)
 
-    subtract_sigobj = sourmash.SourmashSignature(subtract_mh)
+    subtract_sigobj = sourmash.SourmashSignature(subtract_mh, name=args.set_name)
 
     with sourmash_args.SaveSignaturesToLocation(args.output) as save_sigs:
         save_sigs.add(subtract_sigobj)
@@ -1550,8 +1551,6 @@ def check(args):
 
 def collect(args):
     "Collect signature metadata across many locations, save to manifest"
-    # TODO:
-    # test what happens with directories :)
     set_quiet(False, args.debug)
 
     if os.path.exists(args.output):

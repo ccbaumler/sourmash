@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::iter::Iterator;
 use std::str;
 
 use nohash_hasher::BuildNoHashHasher;
@@ -60,7 +58,7 @@ impl std::fmt::Display for HashFunctions {
             f,
             "{}",
             match self {
-                HashFunctions::Murmur64Dna => "dna",
+                HashFunctions::Murmur64Dna => "DNA",
                 HashFunctions::Murmur64Protein => "protein",
                 HashFunctions::Murmur64Dayhoff => "dayhoff",
                 HashFunctions::Murmur64Hp => "hp",

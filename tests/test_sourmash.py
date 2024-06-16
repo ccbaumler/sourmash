@@ -23,6 +23,8 @@ from sourmash import MinHash, sourmash_args
 from sourmash.sbt import SBT, Node
 from sourmash.sbtmh import SigLeaf, load_sbt_index
 from sourmash.search import SearchResult, GatherResult
+from sourmash.signature import load_one_signature_from_json as load_one_signature
+from sourmash.signature import load_signatures_from_json
 
 try:
     import matplotlib
@@ -161,7 +163,7 @@ def test_compare_serial(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -170,7 +172,7 @@ def test_compare_serial(runtmp):
 
         sigs = []
         for fn in testsigs:
-            sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+            sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
     assert (cmp_out == cmp_calc).all()
 
 
@@ -189,7 +191,7 @@ def test_compare_serial_distance(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -198,7 +200,7 @@ def test_compare_serial_distance(runtmp):
 
         sigs = []
         for fn in testsigs:
-            sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+            sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
     assert (cmp_out == cmp_calc).all()
 
 
@@ -219,7 +221,7 @@ def test_compare_parallel(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -228,7 +230,7 @@ def test_compare_parallel(runtmp):
 
         sigs = []
         for fn in testsigs:
-            sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+            sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
     assert (cmp_out == cmp_calc).all()
 
 
@@ -252,7 +254,7 @@ def test_compare_do_serial_compare_with_from_file(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -261,7 +263,7 @@ def test_compare_do_serial_compare_with_from_file(runtmp):
 
         sigs = []
         for fn in testsigs:
-            sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+            sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     assert numpy.array_equal(numpy.sort(cmp_out.flat), numpy.sort(cmp_calc.flat))
 
@@ -281,7 +283,7 @@ def test_compare_do_basic_compare_using_rna_arg(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -305,7 +307,7 @@ def test_compare_do_basic_using_nucleotide_arg(runtmp):
 
     sigs = []
     for fn in testsigs:
-        sigs.append(sourmash.load_one_signature(fn, ksize=21, select_moltype="dna"))
+        sigs.append(load_one_signature(fn, ksize=21, select_moltype="dna"))
 
     cmp_calc = numpy.zeros([len(sigs), len(sigs)])
     for i, si in enumerate(sigs):
@@ -638,7 +640,7 @@ def _load_compare_matrix_and_sigs(compare_csv, sigfiles, *, ksize=31):
     # load in all the input signatures
     idx_to_sig = {}
     for idx, filename in enumerate(sigfiles):
-        ss = sourmash.load_one_signature(filename, ksize=ksize)
+        ss = load_one_signature(filename, ksize=ksize)
         idx_to_sig[idx] = ss
 
     return mat, idx_to_sig
@@ -1791,26 +1793,48 @@ def test_compare_deduce_molecule(runtmp):
 
 
 def test_compare_choose_molecule_dna(runtmp):
-    # choose molecule type
+    # choose molecule type with --dna, ignoring protein
     testdata1 = utils.get_test_data("short.fa")
     testdata2 = utils.get_test_data("short2.fa")
 
-    runtmp.sourmash("compute", "-k", "30", "--dna", "--protein", testdata1, testdata2)
-
-    runtmp.sourmash("compare", "--dna", "short.fa.sig", "short2.fa.sig")
+    runtmp.sourmash(
+        "sketch", "dna", "-p", "k=30,num=500", testdata1, testdata2, "-o", "sigs.zip"
+    )
+    runtmp.sourmash(
+        "sketch",
+        "translate",
+        "-p",
+        "k=10,num=500",
+        testdata1,
+        testdata2,
+        "-o",
+        "sigs.zip",
+    )
+    runtmp.sourmash("compare", "--dna", "sigs.zip")
 
     print(runtmp.last_result.status, runtmp.last_result.out, runtmp.last_result.err)
     assert "min similarity in matrix: 0.938" in runtmp.last_result.out
 
 
 def test_compare_choose_molecule_protein(runtmp):
-    # choose molecule type
+    # choose molecule type with --protein, ignoring DNA
     testdata1 = utils.get_test_data("short.fa")
     testdata2 = utils.get_test_data("short2.fa")
 
-    runtmp.sourmash("compute", "-k", "30", "--dna", "--protein", testdata1, testdata2)
-
-    runtmp.sourmash("compare", "--protein", "short.fa.sig", "short2.fa.sig")
+    runtmp.sourmash(
+        "sketch", "dna", "-p", "k=30,num=500", testdata1, testdata2, "-o", "sigs.zip"
+    )
+    runtmp.sourmash(
+        "sketch",
+        "translate",
+        "-p",
+        "k=10,num=500",
+        testdata1,
+        testdata2,
+        "-o",
+        "sigs.zip",
+    )
+    runtmp.sourmash("compare", "--protein", "sigs.zip")
 
     print(runtmp.last_result.status, runtmp.last_result.out, runtmp.last_result.err)
     assert "min similarity in matrix: 0.91" in runtmp.last_result.out
@@ -2176,9 +2200,9 @@ def test_search_containment_abund(runtmp):
 
     # save!
     with open(runtmp.output("a.sig"), "w") as fp:
-        sourmash.save_signatures([x], fp)
+        signature.save_signatures_to_json([x], fp)
     with open(runtmp.output("b.sig"), "w") as fp:
-        sourmash.save_signatures([y], fp)
+        signature.save_signatures_to_json([y], fp)
 
     # run sourmash search --containment
     with pytest.raises(SourmashCommandFailed) as exc:
@@ -2220,9 +2244,9 @@ def test_search_containment_abund_ignore(runtmp):
 
     # save!
     with open(runtmp.output("a.sig"), "w") as fp:
-        sourmash.save_signatures([x], fp)
+        signature.save_signatures_to_json([x], fp)
     with open(runtmp.output("b.sig"), "w") as fp:
-        sourmash.save_signatures([y], fp)
+        signature.save_signatures_to_json([y], fp)
 
     # run sourmash search
     runtmp.sourmash(
@@ -3291,7 +3315,7 @@ def test_do_sourmash_index_abund(c):
     testdata2 = utils.get_test_data("lca-root/TOBG_MED-875.fna.gz.sig")
 
     with open(testdata2):
-        ss = sourmash.load_one_signature(testdata2, ksize=31)
+        ss = load_one_signature(testdata2, ksize=31)
         assert ss.minhash.track_abundance == True
 
     sbtname = "foo"
@@ -3666,7 +3690,7 @@ def test_do_sourmash_check_sbt_filenames(runtmp):
     sig_names = set()
     sig_md5s = set()
     for f in files:
-        sig = signature.load_one_signature(f)
+        sig = load_one_signature(f)
         sig_names.add(sig.name)
         sig_md5s.add(sig.md5sum())
 
@@ -3817,10 +3841,10 @@ def test_compare_with_abundance_1(runtmp):
     s2 = signature.SourmashSignature(E2, filename="e2", name="e2")
 
     with open(runtmp.output("e1.sig"), "w") as f:
-        signature.save_signatures([s1], f)
+        signature.save_signatures_to_json([s1], f)
 
     with open(runtmp.output("e2.sig"), "w") as f:
-        signature.save_signatures([s2], f)
+        signature.save_signatures_to_json([s2], f)
 
     runtmp.sourmash("search", "e1.sig", "e2.sig", "-k", "5")
 
@@ -3841,10 +3865,10 @@ def test_compare_with_abundance_2(runtmp):
     s2 = signature.SourmashSignature(E2, filename="e2", name="e2")
 
     with open(runtmp.output("e1.sig"), "w") as f:
-        signature.save_signatures([s1], f)
+        signature.save_signatures_to_json([s1], f)
 
     with open(runtmp.output("e2.sig"), "w") as f:
-        signature.save_signatures([s2], f)
+        signature.save_signatures_to_json([s2], f)
 
     runtmp.sourmash("search", "e1.sig", "e2.sig", "-k", "5")
 
@@ -3866,10 +3890,10 @@ def test_compare_with_abundance_3(runtmp):
     s2 = signature.SourmashSignature(E2, filename="e2", name="e2")
 
     with open(runtmp.output("e1.sig"), "w") as f:
-        signature.save_signatures([s1], f)
+        signature.save_signatures_to_json([s1], f)
 
     with open(runtmp.output("e2.sig"), "w") as f:
-        signature.save_signatures([s2], f)
+        signature.save_signatures_to_json([s2], f)
 
     runtmp.sourmash("search", "e1.sig", "e2.sig", "-k", "5")
 
@@ -4395,7 +4419,7 @@ def test_gather_f_match_orig(runtmp, linear_gather, prefetch_gather):
     print(runtmp.last_result.out)
     print(runtmp.last_result.err)
 
-    combined_sig = sourmash.load_one_signature(testdata_combined, ksize=21)
+    combined_sig = load_one_signature(testdata_combined, ksize=21)
     remaining_mh = combined_sig.minhash.to_mutable()
 
     def approx_equal(a, b, n=5):
@@ -4412,7 +4436,7 @@ def test_gather_f_match_orig(runtmp, linear_gather, prefetch_gather):
             # double check -- should match 'search --containment'.
             # (this is kind of useless for a 1.0 contained_by, I guess)
             filename = row["filename"]
-            match = sourmash.load_one_signature(filename, ksize=21)
+            match = load_one_signature(filename, ksize=21)
             assert match.contained_by(combined_sig) == 1.0
 
             # check other fields, too.
@@ -4513,6 +4537,77 @@ def test_gather_abund_nomatch(runtmp, linear_gather, prefetch_gather):
     print(runtmp.last_result.err)
 
     assert "No matches found for --threshold-bp at 50.0 kbp." in runtmp.last_result.err
+
+
+def test_gather_metagenome_3_thermo(runtmp):
+    # test gather matches in more detail.
+    match1 = "gather/GCF_000016785.1_ASM1678v1_genomic.fna.gz.sig"
+    match2 = "gather/GCF_000018945.1_ASM1894v1_genomic.fna.gz.sig"
+    match3 = "gather/GCF_000008545.1_ASM854v1_genomic.fna.gz.sig"
+
+    match1 = utils.get_test_data(match1)
+    match2 = utils.get_test_data(match2)
+    match3 = utils.get_test_data(match3)
+
+    query_sig = utils.get_test_data("gather/combined.sig")
+
+    runtmp.sourmash(
+        "gather",
+        query_sig,
+        match1,
+        match2,
+        match3,
+        "-k",
+        "21",
+        "--threshold-bp=0",
+        "-o",
+        "match3.csv",
+    )
+
+    print(runtmp.last_result.out)
+    print(runtmp.last_result.err)
+
+    outfile = runtmp.output("match3.csv")
+    with sourmash_args.FileInputCSV(outfile) as r:
+        rows = list(r)
+
+    assert len(rows) == 3
+
+    # first row
+    row = rows[0]
+    assert row["name"].startswith("NC_000853.1 ")
+    f_match = float(row["f_match"])
+    f_unique_to_query = round(float(row["f_unique_to_query"]), 5)
+    unique_intersect_bp = int(row["unique_intersect_bp"])
+    remaining_bp = int(row["remaining_bp"])
+    assert f_match == 1.0
+    assert f_unique_to_query == round(0.13096862, 5)
+    assert unique_intersect_bp == 1920000
+    assert remaining_bp == 12740000
+
+    # second row
+    row = rows[1]
+    assert row["name"].startswith("NC_011978.1 ")
+    f_match = float(row["f_match"])
+    f_unique_to_query = round(float(row["f_unique_to_query"]), 5)
+    unique_intersect_bp = int(row["unique_intersect_bp"])
+    remaining_bp = int(row["remaining_bp"])
+    assert round(f_match, 5) == round(0.898936170212766, 5)
+    assert f_unique_to_query == round(0.115279, 5)
+    assert unique_intersect_bp == 1690000
+    assert remaining_bp == 11050000
+
+    # third row
+    row = rows[2]
+    assert row["name"].startswith("NC_009486.1 ")
+    f_match = float(row["f_match"])
+    f_unique_to_query = round(float(row["f_unique_to_query"]), 5)
+    unique_intersect_bp = int(row["unique_intersect_bp"])
+    remaining_bp = int(row["remaining_bp"])
+    assert round(f_match, 5) == round(0.4842105, 5)
+    assert f_unique_to_query == round(0.0627557, 5)
+    assert unique_intersect_bp == 920000
+    assert remaining_bp == 10130000
 
 
 def test_gather_metagenome(runtmp):
@@ -5417,12 +5512,12 @@ def test_multigather_metagenome_output_unique(runtmp):
 
     # change 'filename' on 'combined.sig' to something else
     orig_query_sig = utils.get_test_data("gather/combined.sig")
-    sketch = sourmash.load_one_signature(orig_query_sig)
+    sketch = load_one_signature(orig_query_sig)
     ss = signature.SourmashSignature(sketch.minhash, filename="named_query")
 
     query_sig = runtmp.output("the_query.sig")
     with open(query_sig, "w") as f:
-        signature.save_signatures([ss], f)
+        signature.save_signatures_to_json([ss], f)
 
     cmd = f"multigather --query {query_sig} --db {testdata_sigs_arg} -k 21 --threshold-bp=0 -U"
     cmd = cmd.split(" ")
@@ -5714,8 +5809,8 @@ def test_gather_metagenome_output_unassigned_nomatches(
     print(c.last_result.out)
     assert "No matches found for --threshold-bp at 50.0 kbp." in c.last_result.err
 
-    x = sourmash.load_one_signature(query_sig, ksize=31)
-    y = sourmash.load_one_signature(c.output("foo.sig"))
+    x = load_one_signature(query_sig, ksize=31)
+    y = load_one_signature(c.output("foo.sig"))
 
     assert x.minhash == y.minhash
 
@@ -5749,8 +5844,8 @@ def test_gather_metagenome_output_unassigned_nomatches_protein(
     c.run_sourmash("sig", "describe", c.output("foo.sig"))
     print(c.last_result.out)
 
-    x = sourmash.load_one_signature(query_sig, ksize=57)
-    y = sourmash.load_one_signature(c.output("foo.sig"))
+    x = load_one_signature(query_sig, ksize=57)
+    y = load_one_signature(c.output("foo.sig"))
 
     assert x.minhash == y.minhash
     assert y.minhash.moltype == "protein"
@@ -5957,7 +6052,7 @@ def test_gather_downsample_multiple(runtmp, linear_gather, prefetch_gather):
     query_sig = utils.get_test_data("GCF_000006945.2-s500.sig")
 
     # load in the hashes and do split them into four bins, randomly.
-    ss = sourmash.load_one_signature(query_sig)
+    ss = load_one_signature(query_sig)
     hashes = list(ss.minhash.hashes)
 
     random.seed(a=1)  # fix seed so test is reproducible
@@ -5979,7 +6074,7 @@ def test_gather_downsample_multiple(runtmp, linear_gather, prefetch_gather):
         binsig = signature.SourmashSignature(mh_bins[i], name=f"bin{i}")
 
         with open(runtmp.output(f"bin{i}.sig"), "wb") as fp:
-            sourmash.save_signatures([binsig], fp)
+            sourmash.save_signatures_to_json([binsig], fp)
 
         gathersigs.append(f"bin{i}.sig")
 
@@ -6439,7 +6534,7 @@ def test_gather_abund_10_1(runtmp, prefetch_gather, linear_gather):
     for prod, f_weighted in zip(weighted_calc, f_weighted_list):
         assert prod / total_weighted == f_weighted, (prod, f_weighted)
 
-    query_sig = sourmash.load_one_signature(query)
+    query_sig = load_one_signature(query)
     query_mh = query_sig.minhash
 
     total_bp_analyzed = sum(unique_overlaps) + remaining_bps[-1]
@@ -6547,11 +6642,11 @@ def test_gather_output_unassigned_with_abundance(
 
     assert os.path.exists(c.output("unassigned.sig"))
 
-    nomatch = sourmash.load_one_signature(c.output("unassigned.sig"))
+    nomatch = load_one_signature(c.output("unassigned.sig"))
     assert nomatch.minhash.track_abundance
 
-    query_ss = sourmash.load_one_signature(query)
-    against_ss = sourmash.load_one_signature(against)
+    query_ss = load_one_signature(query)
+    against_ss = load_one_signature(against)
 
     # unassigned should have nothing that is in the database
     nomatch_mh = nomatch.minhash
@@ -6641,8 +6736,8 @@ def test_multigather_output_unassigned_with_abundance(runtmp, sig_save_extension
     nomatch = list(nomatch)[0]
     assert nomatch.minhash.track_abundance
 
-    query_ss = sourmash.load_one_signature(query)
-    against_ss = sourmash.load_one_signature(against)
+    query_ss = load_one_signature(query)
+    against_ss = load_one_signature(against)
 
     # unassigned should have nothing that is in the database
     nomatch_mh = nomatch.minhash
@@ -7186,7 +7281,7 @@ def test_license_cc0(runtmp):
     sigfile = runtmp.output("short.fa.sig")
     assert os.path.exists(sigfile)
 
-    sig = next(signature.load_signatures(sigfile))
+    sig = next(load_signatures_from_json(sigfile))
     assert str(sig).endswith("short.fa")
 
     assert sig.license == "CC0"
@@ -7209,7 +7304,7 @@ def test_license_load_non_cc0():
     sigfile = utils.get_test_data("bad-license.sig")
 
     try:
-        next(signature.load_signatures(sigfile, do_raise=True))
+        next(load_signatures_from_json(sigfile, do_raise=True))
     except Exception as e:
         assert "sourmash only supports CC0-licensed signatures" in str(e)
 
@@ -8124,8 +8219,8 @@ def test_search_jaccard_ani_downsample(runtmp):
 
     sig47 = utils.get_test_data("47.fa.sig")
     sig4763 = utils.get_test_data("47+63.fa.sig")
-    ss47 = sourmash.load_one_signature(sig47)
-    ss4763 = sourmash.load_one_signature(sig4763)
+    ss47 = load_one_signature(sig47)
+    ss4763 = load_one_signature(sig4763)
     print(f"SCALED: sig1: {ss47.minhash.scaled}, sig2: {ss4763.minhash.scaled}")
 
     c.run_sourmash("search", sig47, sig4763, "-o", "xxx.csv")
@@ -8166,7 +8261,7 @@ def test_search_jaccard_ani_downsample(runtmp):
         assert round(float(row["ani"]), 3) == 0.993
 
     # downsample manually and assert same ANI
-    ss47_ds = signature.load_one_signature(ds_sig47)
+    ss47_ds = load_one_signature(ds_sig47)
     print("SCALED:", ss47_ds.minhash.scaled, ss4763.minhash.scaled)
     ani_info = ss47_ds.jaccard_ani(ss4763, downsample=True)
     print(ani_info)
@@ -8381,7 +8476,7 @@ def test_compare_containment_ani_asymmetry(runtmp):
     # load in all the input signatures
     idx_to_sig = {}
     for idx, filename in enumerate(testdata_sigs):
-        ss = sourmash.load_one_signature(filename, ksize=31)
+        ss = load_one_signature(filename, ksize=31)
         idx_to_sig[idx] = ss
 
     # check explicit containment against output of compare
